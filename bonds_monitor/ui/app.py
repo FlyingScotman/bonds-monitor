@@ -1,14 +1,13 @@
 """Main Textual TUI application."""
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional
 
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Vertical
-from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import (
     DataTable,
@@ -17,8 +16,6 @@ from textual.widgets import (
     Input,
     Label,
     Static,
-    TabbedContent,
-    TabPane,
 )
 from textual.timer import Timer
 
@@ -80,15 +77,6 @@ class BondDetailScreen(ModalScreen):
 
 
 # ---------------------------------------------------------------------------
-# Search / filter bar
-# ---------------------------------------------------------------------------
-
-class SearchBar(Container):
-    def compose(self) -> ComposeResult:
-        yield Label("/")
-        yield Input(placeholder="search...", id="search-input")
-
-
 # ---------------------------------------------------------------------------
 # Main bond table
 # ---------------------------------------------------------------------------
@@ -129,9 +117,17 @@ class BondsApp(App):
         display: none;
         layout: horizontal;
         padding: 0 1;
+        align: left middle;
     }
     #search-bar.visible {
         display: block;
+    }
+    #search-bar Label {
+        width: auto;
+        padding: 0 1;
+    }
+    #search-bar Input {
+        width: 1fr;
     }
     #detail-box {
         background: $panel;
@@ -176,16 +172,14 @@ class BondsApp(App):
         Binding("q",       "quit",          "Quit",        show=True),
     ]
 
-    _auto_refresh: reactive[bool] = reactive(True)
-    _status_msg: reactive[str] = reactive("")
-
     def __init__(self, engine: Engine, config: dict):
         super().__init__()
         self._engine = engine
         self._config = config
         self._rows: list[BondDisplayRow] = []
         self._filtered_rows: list[BondDisplayRow] = []
-        self._timer: Optional[Timer] = None
+        self._refresh_timer: Optional[Timer] = None
+        self._auto_on: bool = True   # whether auto-refresh is enabled
         self._search_query: str = ""
         self._search_matches: list[int] = []
         self._search_idx: int = 0
@@ -202,7 +196,9 @@ class BondsApp(App):
         with Vertical():
             yield Static("", id="status-bar")
             yield DataTable(id="bond-table", cursor_type="row")
-            yield Container(id="search-bar")
+            with Container(id="search-bar"):
+                yield Label("/  ")
+                yield Input(placeholder="search...", id="search-input")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -241,7 +237,7 @@ class BondsApp(App):
             return
         self._apply_tab_filter()
         self._populate_table()
-        self._set_status(f"Updated — {len(self._filtered_rows)} bonds  |  Tab: {self._current_tab['name']}  |  Auto: {'ON' if self._auto_refresh else 'OFF'}")
+        self._set_status(f"Updated — {len(self._filtered_rows)} bonds  |  Tab: {self._current_tab['name']}  |  Auto: {'ON' if self._auto_on else 'OFF'}")
 
     def _apply_tab_filter(self) -> None:
         tab = self._current_tab
@@ -267,12 +263,12 @@ class BondsApp(App):
         self._filtered_rows = rows
 
     def _schedule_auto_refresh(self) -> None:
-        if self._timer:
-            self._timer.stop()
-            self._timer = None
-        if self._auto_refresh:
+        if self._refresh_timer:
+            self._refresh_timer.stop()
+            self._refresh_timer = None
+        if self._auto_on:
             interval = self._config.get("refresh", {}).get("interval_seconds", 10)
-            self._timer = self.set_interval(interval, self._do_refresh)
+            self._refresh_timer = self.set_interval(interval, self._do_refresh)
 
     @property
     def _current_tab(self) -> dict:
@@ -320,9 +316,9 @@ class BondsApp(App):
         self._do_refresh()
 
     def action_toggle_auto(self) -> None:
-        self._auto_refresh = not self._auto_refresh
+        self._auto_on = not self._auto_on
         self._schedule_auto_refresh()
-        self._set_status(f"Auto refresh: {'ON' if self._auto_refresh else 'OFF'}")
+        self._set_status(f"Auto refresh: {'ON' if self._auto_on else 'OFF'}")
 
     def action_show_detail(self) -> None:
         table = self.query_one("#bond-table", DataTable)
@@ -335,7 +331,7 @@ class BondsApp(App):
     def action_search(self) -> None:
         bar = self.query_one("#search-bar", Container)
         bar.add_class("visible")
-        bar.query_one(Input).focus()
+        self.query_one("#search-input", Input).focus()
 
     def action_search_next(self) -> None:
         if self._search_matches:
