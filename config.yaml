@@ -1,0 +1,145 @@
+# bonds-monitor configuration
+
+# ---------------------------------------------------------------------------
+# QUIK table format
+# ---------------------------------------------------------------------------
+# This section describes how your QUIK table is structured.
+# Fill in the exact column names (or 0-based indices) as they appear in your
+# QUIK "current trading" table header.
+#
+# Use null for any column that doesn't exist in your table.
+# You can use either column names (strings) or 0-based integer indices.
+# ---------------------------------------------------------------------------
+
+quik:
+  # Mapping from our internal field names -> QUIK column header name (or index)
+  column_mapping:
+    isin:               "Инструмент"        # ISIN code or ticker
+    short_name:         "Краткое наим."     # Short bond name / description
+    board:              "Режим торгов"      # Trading board/mode code (e.g. TQOD)
+    bid:                "Спрос"             # Best bid price, % of par
+    ask:                "Предложение"       # Best ask price, % of par
+    last_price:         "Последняя"         # Last trade price, % of par
+    accrued_interest:   "НКД"               # Accrued interest, % of par (exchange AI)
+    volume:             "Объём"             # Today's trading volume (in RUB or lots)
+    volume_unit:        "rub"               # "rub" | "lots" — how volume is denominated
+    lot_size:           1                   # lot size in bonds (1 bond = 1 lot usually)
+    outstanding:        "В обращении"       # Outstanding notional (for filtering)
+    currency:           "Валюта расчётов"   # Settlement currency (RUB / CNY etc.)
+    maturity:           "Дата погашения"    # Maturity or put date
+
+  # How to classify trading boards by type.
+  # Add all board codes that appear in your QUIK setup.
+  # Any board not listed here will be classified as UNKNOWN.
+  board_types:
+    rub_orderbook:
+      - "TQOD"   # Main RUB corporate bond orderbook
+      - "TQCB"   # Government + OFZ RUB orderbook (if needed)
+    cny_orderbook:
+      - "CETS"   # CNY-settled orderbook
+    negotiated:
+      - "PSAU"   # Negotiated deals (USD-settled)
+      - "PSBB"   # Negotiated deals (RUB-settled)
+      - "PSEU"   # Negotiated deals (EUR-settled)
+    repo:
+      - "RPMO"   # Overnight repo
+      - "RPEU"   # Longer-term repo
+
+  # Date format used by QUIK in the maturity column
+  date_format: "%d.%m.%Y"   # e.g. "15.03.2028"
+
+# ---------------------------------------------------------------------------
+# Pre-filtering
+# (Applied to raw QUIK data before any calculations)
+# ---------------------------------------------------------------------------
+filters:
+  min_outstanding_mm: 100          # Skip bonds with outstanding < 100 million
+  currencies: ["USD", "EUR", "CNH"]  # Only track hard-currency bonds
+
+# ---------------------------------------------------------------------------
+# Refresh / recalculation
+# ---------------------------------------------------------------------------
+refresh:
+  mode: "auto"          # "auto" | "manual"
+  interval_seconds: 10  # used in auto mode
+
+# ---------------------------------------------------------------------------
+# Display columns
+# Ordered list of columns shown in the main table.
+# Available column IDs:
+#   short_name, isin, currency, maturity, bid, ask,
+#   conv_bid, conv_ask, bid_yield, ask_yield, duration, z_spread,
+#   volume, repo_rate
+# ---------------------------------------------------------------------------
+display:
+  columns:
+    - id: short_name
+      label: "Name"
+      width: 14
+    - id: isin
+      label: "ISIN"
+      width: 14
+    - id: currency
+      label: "CCY"
+      width: 5
+    - id: maturity
+      label: "Mat/Put"
+      width: 9
+    - id: bid
+      label: "Bid RUB"
+      width: 9
+    - id: ask
+      label: "Ask RUB"
+      width: 9
+    - id: conv_bid
+      label: "Conv Bid"
+      width: 9
+    - id: conv_ask
+      label: "Conv Ask"
+      width: 9
+    - id: bid_yield
+      label: "Bid Yld"
+      width: 8
+    - id: ask_yield
+      label: "Ask Yld"
+      width: 8
+    - id: duration
+      label: "Dur"
+      width: 6
+    - id: volume
+      label: "Vol MM"
+      width: 8
+    - id: repo_rate
+      label: "Repo"
+      width: 7
+
+# ---------------------------------------------------------------------------
+# Tabs (preset filter/sort configurations)
+# ---------------------------------------------------------------------------
+tabs:
+  - name: "All"
+    filter: {}
+    sort: maturity
+
+  - name: "USD"
+    filter:
+      currency: "USD"
+    sort: maturity
+
+  - name: "CNH"
+    filter:
+      currency: "CNH"
+    sort: maturity
+
+  - name: "Short (<2Y)"
+    filter:
+      max_duration: 2.0
+    sort: duration
+
+# ---------------------------------------------------------------------------
+# Market data storage (not implemented yet — placeholder for future use)
+# ---------------------------------------------------------------------------
+storage:
+  enabled: false
+  db_path: "./data/market_history.db"
+  interval_seconds: 30
